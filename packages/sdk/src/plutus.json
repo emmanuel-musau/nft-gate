@@ -1,0 +1,59 @@
+{
+  "preamble": {
+    "title": "mutisyalabs/nft-gate",
+    "description": "Aiken contracts for project 'mutisyalabs/nft-gate'",
+    "version": "0.0.0",
+    "plutusVersion": "v3",
+    "compiler": {
+      "name": "Aiken",
+      "version": "v1.1.23+8949565"
+    },
+    "license": "MIT"
+  },
+  "validators": [
+    {
+      "title": "gate.gate.withdraw",
+      "redeemer": {
+        "title": "_redeemer",
+        "schema": {
+          "$ref": "#/definitions/Data"
+        }
+      },
+      "parameters": [
+        {
+          "title": "company_policy",
+          "schema": {
+            "$ref": "#/definitions/ByteArray"
+          }
+        }
+      ],
+      "compiledCode": "585b010100229800aba2aba1aab9eaab9dab9a9bae00248888896600264653001300700198039804000cc01c0092225980099b8748010c020dd500144c8cdc7803803980518049baa0028b200e180380098021baa0078a4d1365640081",
+      "hash": "39775c368dad89b09277b657f437261a8acf0d4d509a67dcd3fe2e01"
+    },
+    {
+      "title": "gate.gate.else",
+      "redeemer": {
+        "schema": {}
+      },
+      "parameters": [
+        {
+          "title": "company_policy",
+          "schema": {
+            "$ref": "#/definitions/ByteArray"
+          }
+        }
+      ],
+      "compiledCode": "585b010100229800aba2aba1aab9eaab9dab9a9bae00248888896600264653001300700198039804000cc01c0092225980099b8748010c020dd500144c8cdc7803803980518049baa0028b200e180380098021baa0078a4d1365640081",
+      "hash": "39775c368dad89b09277b657f437261a8acf0d4d509a67dcd3fe2e01"
+    }
+  ],
+  "definitions": {
+    "ByteArray": {
+      "dataType": "bytes"
+    },
+    "Data": {
+      "title": "Data",
+      "description": "Any Plutus data."
+    }
+  }
+}

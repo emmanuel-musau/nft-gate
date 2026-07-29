@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+.turbo/
+**/build/
+
+# Aiken build artifacts (the SDK vendors a copy at packages/sdk/src/plutus.json)
+**/plutus.json
+!packages/sdk/src/plutus.json
+
+# Environment — never commit real secrets
+.env
+.env.*.local
+
+# Editor / OS
+.DS_Store
+*.log

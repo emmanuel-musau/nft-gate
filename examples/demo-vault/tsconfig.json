@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "app",
+    "outDir": "dist"
+  },
+  "include": ["app"]
+}

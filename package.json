@@ -1,0 +1,32 @@
+{
+  "name": "nft-gate",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Bring-your-own-token access control for Cardano DApps",
+  "license": "MIT",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "type-check": "turbo run type-check",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "clean": "turbo run clean",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@changesets/cli": "^2.29.5",
+    "@eslint/js": "^9.31.0",
+    "eslint": "^9.31.0",
+    "prettier": "^3.6.2",
+    "turbo": "^2.5.5",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.38.0",
+    "vitest": "^3.2.4"
+  },
+  "packageManager": "pnpm@11.18.0",
+  "engines": {
+    "node": ">=20"
+  }
+}

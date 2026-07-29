@@ -1,0 +1,18 @@
+name = "mutisyalabs/nft-gate"
+version = "0.0.0"
+compiler = "v1.1.23"
+plutus = "v3"
+license = "MIT"
+description = "Aiken contracts for project 'mutisyalabs/nft-gate'"
+
+[repository]
+user = "mutisyalabs"
+project = "nft-gate"
+platform = "github"
+
+[[dependencies]]
+name = "aiken-lang/stdlib"
+version = "v3.1.0"
+source = "github"
+
+[config]

@@ -36,38 +36,67 @@ The genuinely valuable, genuinely hard part is **not** the on-chain check (it is
 
 ### 3.1 The gate validator
 
-A **withdrawal validator** parameterized by the company's NFT policy ID. When it runs, it passes if and only if the transaction contains a reference input that (a) holds a token under the parameterized policy, and (b) belongs to a wallet that signed the transaction.
+_(Design finalized 2026-07-30; this section supersedes the earlier conceptual sketch.)_
 
-Conceptual logic (fill in exact stdlib import paths against the installed version):
+A **withdrawal validator** parameterized by **three compile-time values**:
 
-```aiken
-use cardano/address.{Credential, VerificationKey}
-use cardano/assets.{PolicyId, tokens}
-use cardano/transaction.{Transaction}
-use aiken/collection/list
-use aiken/collection/dict
+1. `asset_policy: PolicyId` — the membership token's policy;
+2. `asset_name_prefix: AssetName` — only tokens whose asset name **starts with** this prefix
+   count. Empty (the default) matches every name (whole-collection gating). A CIP-68 label
+   (e.g. `000de140` for `(222)` user tokens) scopes the gate to user tokens and excludes
+   key-held `(100)` reference tokens; a full asset name yields single-beacon gating (the
+   adalink `[policy, name]` pattern). Note this is **scoping within a legitimate policy, not
+   a defense against a compromised one** — minters choose asset names, so the policy remains
+   the root of trust;
+3. `min_quantity: Int` — the minimum holdings required to pass. NFT projects use `1`; larger
+   values enable fungible-token gating ("hold ≥ 1000 $TOKEN"). The effective threshold is
+   clamped to at least 1 on-chain (`math.max(min_quantity, 1)`) so a misconfigured
+   `0`/negative parameter can never produce a vacuous gate that admits everyone.
 
-validator gate(company_policy: PolicyId) {
-  withdraw(_redeemer: Data, _account: Credential, self: Transaction) {
-    list.any(
-      self.reference_inputs,
-      fn(i) {
-        let holds_company_nft = dict.size(tokens(i.output.value, company_policy)) > 0
-        let is_the_signer =
-          when i.output.address.payment_credential is {
-            VerificationKey(vkh) -> list.has(self.extra_signatories, vkh)
-            _ -> False
-          }
-        holds_company_nft && is_the_signer
-      },
-    )
-  }
-}
-```
+Any parameter change ⇒ a different script hash, i.e. a different gate.
 
-**Why signer binding matters:** without requiring the reference-input owner to also be a transaction signer, anyone could point at _someone else's_ NFT UTxO to pass the gate. Binding to `extra_signatories` closes that spoof.
+**The check (withdraw purpose):** the gate passes iff **some single UTxO among the
+transaction's `reference_inputs` _or_ its spent `inputs`** satisfies all of:
 
-**Why reference inputs (not spending):** the NFT is proven present without being moved, spent, or locked. The user keeps their asset untouched.
+- (a) the total quantity of tokens under `asset_policy` whose names start with
+  `asset_name_prefix` in that one UTxO is ≥ `max(min_quantity, 1)` (quantities are
+  **per-UTxO, not summed across UTxOs** — one `list.any` scan, simplest to audit; the SDK
+  consolidates a user's tokens into one UTxO if needed);
+- (b) its payment credential is a `VerificationKey`;
+- (c) that key hash appears in the transaction's `extra_signatories`.
+
+The check lives as a **pure function in `lib/gate/check.ak`** (this is the embedded-mode API);
+`validators/gate.ak` is a thin wrapper. The redeemer is ignored.
+
+**Why signer binding matters:** without requiring the proof-UTxO's owner to also be a
+transaction signer, anyone could point at _someone else's_ NFT UTxO to pass the gate. Binding
+to `extra_signatories` closes that spoof. A corollary: **only key-owned UTxOs qualify** —
+tokens held at script addresses (contract-locked, script-based smart wallets, native-script
+multisig) cannot "sign" and therefore never pass in v1. This is the anti-spoof mechanism, not
+an oversight; document it as a known limitation.
+
+**Why reference inputs (not spending):** the NFT is proven present without being moved, spent,
+or locked. The user keeps their asset untouched. Spent `inputs` are _also_ accepted purely as
+defense in depth: if a consumer builds a transaction without `withGate` and their wallet's
+coin selection happens to spend the token's UTxO in the same transaction, a
+reference-inputs-only gate would reject a legitimate holder. Signer binding applies
+identically to both lists, so this widens nothing for attackers.
+
+**Certificates (publish purpose):** the validator carries an explicit `publish` handler:
+
+- **stake registration** (`RegisterCredential`) → always passes, so `setup` works regardless
+  of whether the SDK/ledger emits the legacy or the Conway-style registration certificate
+  (the new style makes the script itself run);
+- **deregistration** (`UnregisterCredential`) → always fails. A live gate can never be
+  grief-killed (deregistration would break every dependent DApp and hand the ~2 ADA deposit
+  refund to the attacker). The gate is **permanent**; the deposit is intentionally
+  unrecoverable — say so in the docs;
+- **everything else** (delegation, DRep, pool certs) → fails. Forbidding delegation keeps the
+  reward-account balance at exactly zero forever, which matters: the ledger requires a
+  withdrawal to take the _full_ reward balance, so any accrued rewards would invalidate the
+  zero-withdrawal trigger.
+
+All remaining purposes (spend, mint, vote, propose) are rejected via `else(_) { fail }`.
 
 ### 3.2 The zero-withdrawal trigger — why it exists
 
@@ -134,8 +163,13 @@ interface SetupResult {
   referenceScriptUtxo: string; // "txHash#index" of the published reference script
 }
 
-// 1) Pure: bake the policy ID into the blueprint, derive the hash.
-function instantiate(policyId: string): GateInstance;
+// 1) Pure: bake the three parameters into the blueprint, derive the hash.
+//    minQuantity defaults to 1 (NFT gating); assetNamePrefix (hex) defaults to "" = any name
+//    (CIP-68 label to scope to user tokens; full name for single-beacon gating).
+function instantiate(
+  policyId: string,
+  options?: { minQuantity?: number; assetNamePrefix?: string },
+): GateInstance;
 
 // 2) One-time, consumer-run: register reward account + publish reference script.
 //    Written with Effect (Effect.gen) to mirror evolution-sdk's style.
@@ -223,8 +257,9 @@ nft-gate/
 ├─ onchain/                       # Aiken project
 │  ├─ aiken.toml
 │  ├─ lib/gate/check.ak           # reusable core check (shared by both modes)
-│  ├─ validators/gate.ak          # withdraw-zero validator (thin wrapper)
-│  ├─ tests/gate_test.ak          # pass + fail cases
+│  ├─ lib/gate/check.test.ak      # adversarial test matrix for the check
+│  ├─ validators/gate.ak          # withdraw-zero validator (thin wrapper, logic only)
+│  ├─ validators/gate.test.ak     # handler-level tests
 │  └─ plutus.json                 # BUILD OUTPUT (copied into the SDK)
 ├─ packages/
 │  ├─ sdk/  (@nft-gate/sdk)       # instantiate · setup (Effect) · withGate · blueprint
@@ -246,8 +281,11 @@ The repo root exists with `git init` done and empty `packages/`, `examples/`, `d
 If a full scaffold-from-current-state prompt is provided separately, follow it; otherwise create everything in Section 9. All not-yet-implemented functions should compile but throw / `Effect.fail` with a clear "not implemented — M2/M3" message and a TODO describing exactly what they must do.
 
 > **Status note (2026-07-30):** the M1 scaffold described above has been built — full monorepo,
-> compiling gate stub, vendored blueprint, passing build/test/type-check/lint. See the root
-> `CLAUDE.md` for current state and known divergences from §5.1.
+> vendored blueprint, passing build/test/type-check/lint. **M1 on-chain core is implemented**:
+> the real check per §3.1 lives in `lib/gate/check.ak` with `validators/gate.ak` as the thin
+> wrapper (withdraw + publish + else), 24 aiken tests covering the N3 adversarial matrix, and
+> the rebuilt blueprint re-vendored into the SDK. See the root `CLAUDE.md` for current state
+> and known divergences from §5.1.
 
 ---
 
@@ -255,10 +293,10 @@ If a full scaffold-from-current-state prompt is provided separately, follow it; 
 
 ### Functional
 
-- **F1** `instantiate(policyId)` returns a `GateInstance` with a deterministic `hash` derived from the parameterized script; two different policy IDs yield two different hashes.
+- **F1** `instantiate(policyId, options?)` returns a `GateInstance` with a deterministic `hash` derived from the parameterized script; any differing parameter (policy, name prefix, quantity) yields a different hash.
 - **F2** `setup(gate)` performs the two one-time transactions (stake registration, reference-script publish) and returns a `SetupResult`; it never requires the maintainer's keys (consumer signs).
 - **F3** `withGate(tx, gate, setup, userAddress)` appends the reference to the gate script, the reference to the user's NFT UTxO, the zero-withdrawal from the reward account, and the user as a required signer — producing a transaction that succeeds iff the user holds a token under the policy.
-- **F4** The on-chain gate passes iff a reference input holds a token under the parameterized policy AND that input's owner signed the transaction.
+- **F4** The on-chain gate passes iff a single reference input _or_ spent input holds ≥ `max(min_quantity, 1)` tokens under the parameterized policy matching the name prefix AND that input's payment key signed the transaction; stake registration passes, deregistration and all other certificates/purposes fail (§3.1).
 - **F5** `nft-gate instantiate <policyId>` prints the hash; other commands stubbed with clear "not implemented (M3)" until built.
 - **F6** The example demonstrates a full gated interaction on the Preview testnet.
 
@@ -266,7 +304,7 @@ If a full scaffold-from-current-state prompt is provided separately, follow it; 
 
 - **N1** ESM, strict TypeScript, zero `any` in public APIs; typed errors via Effect where async.
 - **N2** `pnpm build`, `pnpm test`, `pnpm type-check`, `pnpm lint` all pass at every milestone boundary.
-- **N3** The on-chain validator is minimal, readable, and unit-tested with explicit adversarial fail cases (missing NFT; NFT present but owner not a signer; wrong policy).
+- **N3** The on-chain validator is minimal, readable, and unit-tested with explicit adversarial fail cases: missing token; token present but owner not a signer; wrong policy; wrong name prefix (incl. CIP-68 reference token vs user token); quantity below threshold (including split across UTxOs); token at a script address; deregistration and non-withdraw purposes rejected.
 - **N4** No secrets committed; `.env` gitignored; `.env.example` provided.
 - **N5** Nothing published to npm until the SDK is real (packages stay `0.0.0`, unpublished).
 - **N6** MIT license file present; README present and accurate.

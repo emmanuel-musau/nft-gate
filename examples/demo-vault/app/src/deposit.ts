@@ -11,12 +11,12 @@
  */
 import { instantiate, withGate } from "@nft-gate/sdk";
 
-// The company's NFT policy — any wallet holding a token under it may deposit.
-const COMPANY_POLICY_ID = "d".repeat(56);
+// The asset policy — any wallet holding a token under it may deposit.
+const ASSET_POLICY_ID = "d".repeat(56);
 
 export function buildDepositTx(): void {
   // 1. Bind a gate to the policy (throws "not implemented — M2" for now).
-  const gate = instantiate(COMPANY_POLICY_ID, "Preprod");
+  const gate = instantiate(ASSET_POLICY_ID, { network: "Preprod" });
   console.log(`Gate script hash: ${gate.gateScriptHash}`);
 
   // 2. Wrap the DApp's own transaction so the gate check runs on-chain.

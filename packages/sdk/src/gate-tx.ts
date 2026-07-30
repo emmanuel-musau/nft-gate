@@ -11,7 +11,7 @@ export interface GatedTxBuilder {
 /**
  * Wraps a DApp transaction so the gate check runs on-chain — the hot path.
  * Call it on every transaction that must be limited to holders of the
- * company's NFT policy.
+ * asset policy.
  *
  * TODO(M2): implement —
  *   1. append the gate's reference-script UTxO (from `SetupResult`) as a

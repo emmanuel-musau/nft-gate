@@ -1,10 +1,14 @@
 /**
- * A gate bound to one company's NFT policy: the parameterized withdraw-zero
- * validator with the policy ID applied, plus everything derived from it.
+ * A gate bound to one asset policy: the parameterized withdraw-zero
+ * validator with its parameters applied, plus everything derived from it.
  */
 export interface GateInstance {
-  /** The company's NFT policy ID (hex) the gate was parameterized with. */
-  readonly companyPolicyId: string;
+  /** The asset policy ID (hex) the gate was parameterized with. */
+  readonly assetPolicyId: string;
+  /** Hex-encoded asset-name prefix a token's name must start with ("" = any). */
+  readonly assetNamePrefix: string;
+  /** Minimum matching-token quantity a single UTxO must hold. */
+  readonly minQuantity: number;
   /** Script hash of the applied validator — doubles as the stake credential. */
   readonly gateScriptHash: string;
   /** Bech32 reward address whose zero-withdrawal triggers the gate check. */

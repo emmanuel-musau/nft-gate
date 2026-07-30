@@ -1,19 +1,38 @@
-use cardano/address.{Credential}
-use cardano/transaction.{Transaction}
+//// Withdraw-zero gate, parameterized per project (SPEC §3.1). A DApp
+//// transaction passes by including a zero-amount withdrawal from this
+//// script's reward account, which runs the membership check once per tx.
+//// Registration passes so setup works with either certificate style;
+//// deregistration and delegation fail so the gate is permanent and its
+//// reward balance stays zero (a non-zero balance would invalidate the
+//// zero-withdrawal trigger).
 
-/// NFT Gate: a withdraw-zero validator parameterized by the company's NFT
-/// policy ID. A DApp transaction passes the gate by including a zero-amount
-/// withdrawal from this script's reward account.
-///
-/// TODO(M2): replace the `True` stub with the real check —
-///   the transaction must reference (or spend) an input holding at least one
-///   token under `company_policy`, and the wallet owning that input must have
-///   signed the transaction (signer binding), so a holder cannot be spoofed.
-validator gate(company_policy: ByteArray) {
-  withdraw(_redeemer: Data, _account: Credential, _self: Transaction) {
-    // Parameter is unused until M2; referencing it here keeps the compiler
-    // quiet and makes the stub's intent explicit.
-    company_policy == company_policy
+use cardano/address.{Credential}
+use cardano/assets.{AssetName, PolicyId}
+use cardano/certificate.{Certificate, RegisterCredential}
+use cardano/transaction.{Transaction}
+use gate/check
+
+validator gate(
+  asset_policy: PolicyId,
+  asset_name_prefix: AssetName,
+  min_quantity: Int,
+) {
+  withdraw(_redeemer: Data, _account: Credential, self: Transaction) {
+    check.satisfies_gate(
+      self.reference_inputs,
+      self.inputs,
+      self.extra_signatories,
+      asset_policy,
+      asset_name_prefix,
+      min_quantity,
+    )
+  }
+
+  publish(_redeemer: Data, certificate: Certificate, _self: Transaction) {
+    when certificate is {
+      RegisterCredential { .. } -> True
+      _ -> False
+    }
   }
 
   else(_) {

@@ -1,12 +1,12 @@
-name = "mutisyalabs/nft-gate"
+name = "nft-gate/sdk"
 version = "0.0.0"
 compiler = "v1.1.23"
 plutus = "v3"
 license = "MIT"
-description = "Aiken contracts for project 'mutisyalabs/nft-gate'"
+description = "Aiken contracts for project 'nft-gate/sdk'"
 
 [repository]
-user = "mutisyalabs"
+user = "nft-gate"
 project = "nft-gate"
 platform = "github"
 

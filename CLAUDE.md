@@ -48,17 +48,26 @@ On-chain (from `onchain/`): `aiken check`, `aiken build`, then
 - **Effect** for anything async or fallible (`Effect.gen`, `Data.TaggedError`); `setup.ts` is
   the style reference. Zero `any` in public APIs.
 - Prettier: double quotes, semicolons, trailing commas, printWidth 100. ESLint 9 flat config.
+- **Comments only where needed**: a comment must state a constraint or rationale the code
+  can't show. No narration, no restating what a line does, no filler. Keep validator/source
+  files logic-only; tests live in separate `*.test.ak` / `*.test.ts` files.
 - Changesets for versioning. Packages stay `0.0.0` and **must not be published to npm** until
   the SDK is real (SPEC N5).
 
-## Current state (updated 2026-07-30)
+## Current state (updated 2026-07-30, evening)
 
-M1 scaffold. Everything compiles and all checks pass, but:
+M1 on-chain core **implemented**:
 
-- `gate.ak` is a **stub that approves every transaction** — the real check (reference input
-  holds policy token AND its owner signed, SPEC §3.1) is M1 work. Do not deploy it anywhere.
+- `lib/gate/check.ak` holds the real membership check (pure fn, embedded-mode API);
+  `validators/gate.ak` is the thin withdraw wrapper + `publish` handler (registration passes,
+  deregistration/delegation fail — gate is permanent). Params: `asset_policy` +
+  `asset_name_prefix` ("" = any; CIP-68 label or full name to scope) + `min_quantity`
+  (clamped to ≥1 on-chain). 29 aiken tests (`lib/gate/check.test.ak` matrix,
+  `validators/gate.test.ak` handlers); blueprint rebuilt and re-vendored. Design decisions of
+  2026-07-30 are in SPEC §3.1.
 - SDK `instantiate` / `setup` / `withGate` throw / `Effect.fail` with "not implemented — M2".
-  Each stub carries a TODO stating exactly what it must do.
+  Each stub carries a TODO stating exactly what it must do. **Note:** `instantiate` must now
+  apply THREE params — `instantiate(policyId, { minQuantity, assetNamePrefix })`.
 - CLI `deploy` / `test-gate` exit 1 with "not implemented (M3)".
 
 ### Known divergence to resolve in M2

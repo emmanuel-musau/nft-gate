@@ -29,7 +29,9 @@ export function loadBlueprint(): Blueprint {
 }
 
 /** Returns the gate validator entry from the blueprint. */
-export function gateValidator(blueprint: Blueprint = loadBlueprint()): Blueprint["validators"][number] {
+export function gateValidator(
+  blueprint: Blueprint = loadBlueprint(),
+): Blueprint["validators"][number] {
   const validator = blueprint.validators.find((v) => v.title.startsWith("gate."));
   if (validator === undefined) {
     throw new Error("No gate validator found in plutus.json — run `aiken build` in onchain/");

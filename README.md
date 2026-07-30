@@ -16,12 +16,17 @@ Built on [evolution-sdk](https://github.com/IntersectMBO/evolution-sdk). MIT lic
 
 ## Packages
 
-| Package | Description |
-| --- | --- |
-| [`@nft-gate/sdk`](packages/sdk) | TypeScript SDK: instantiate a gate, one-time setup, `withGate` transaction wrapper |
-| [`@nft-gate/cli`](packages/cli) | `nft-gate` CLI: instantiate / deploy / test a gate from the terminal |
-| [`onchain`](onchain) | Aiken project with the parameterized withdraw-zero gate validator |
-| [`examples/demo-vault`](examples/demo-vault) | Example consumer DApp using the SDK |
+| Package                                      | Description                                                                        |
+| -------------------------------------------- | ---------------------------------------------------------------------------------- |
+| [`@nft-gate/sdk`](packages/sdk)              | TypeScript SDK: instantiate a gate, one-time setup, `withGate` transaction wrapper |
+| [`@nft-gate/cli`](packages/cli)              | `nft-gate` CLI: instantiate / deploy / test a gate from the terminal               |
+| [`onchain`](onchain)                         | Aiken project with the parameterized withdraw-zero gate validator                  |
+| [`examples/demo-vault`](examples/demo-vault) | Example consumer DApp using the SDK                                                |
+
+## Documentation
+
+- [Build specification & handoff](docs/SPEC.md) — product, architecture, API, milestones (the authoritative document)
+- [CLAUDE.md](CLAUDE.md) — working conventions and current state, for contributors and coding agents
 
 ## Getting started
 

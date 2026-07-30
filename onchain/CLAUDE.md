@@ -28,19 +28,21 @@ compiler objects.
   function (`satisfies_gate`) shared by both integration modes; `validators/gate.ak` is the
   thin wrapper (logic only, no tests). Params: `asset_policy` + `asset_name_prefix` ("" =
   any name; CIP-68 label or full name to scope within a policy) + `min_quantity` (clamped to
-  ≥1 on-chain). Pass iff one UTxO among reference_inputs OR spent inputs holds ≥ threshold
-  prefix-matching tokens under the policy AND its `VerificationKey` payment credential is in
-  `extra_signatories`.
-- `publish` handler: stake registration passes, deregistration and delegation fail (the gate
-  is permanent; forbidding delegation keeps the reward balance at zero so zero-withdrawals
-  stay valid). All other purposes fail via `else`.
+  ≥1 on-chain) + `owner` (retire authority). Withdraw passes iff one UTxO among
+  reference_inputs OR spent inputs holds ≥ threshold prefix-matching tokens under the policy
+  AND its `VerificationKey` payment credential is in `extra_signatories`.
+- `publish` handler: registration passes; deregistration passes **only for the compile-time
+  `owner` param** (4th validator param); delegation fails (keeps the reward balance at zero
+  so zero-withdrawals stay valid). `spend` handler: gate-address UTxOs released only by
+  their inline `GateDatum{owner}` — datum authority is self-referential only and must NEVER
+  gate deregistration (planted-UTxO spoof). All other purposes fail via `else`.
 - Tests live in dedicated `*.test.ak` files: `lib/gate/check.test.ak` (adversarial matrix,
   SPEC §11 N3) and `validators/gate.test.ak` (handler-level). Never mix tests into source
   modules. Aiken only compiles `lib/` and `validators/` — a top-level `tests/` dir would be
   silently ignored. These tests are safety-critical and outrank features.
 - Comment only where needed: constraints/rationale the code can't show. No narration or
   filler comments.
-- The blueprint validator titles are `gate.gate.withdraw` / `gate.gate.publish` /
+- The blueprint validator titles are `gate.gate.withdraw` / `gate.gate.spend` / `gate.gate.publish` /
   `gate.gate.else` (same hash + compiledCode each); the SDK's blueprint loader matches on the
   `gate.` prefix — keep names in sync if you rename anything.
 - CI parity: `.github/workflows/continuous-integration.yml` runs `aiken fmt --check`,

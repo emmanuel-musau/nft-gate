@@ -9,11 +9,13 @@ export interface GateInstance {
   readonly assetNamePrefix: string;
   /** Minimum matching-token quantity a single UTxO must hold. */
   readonly minQuantity: number;
+  /** Key hash (hex) that may retire the gate — baked in as the 4th parameter. */
+  readonly owner: string;
   /** Script hash of the applied validator — doubles as the stake credential. */
   readonly gateScriptHash: string;
   /** Bech32 reward address whose zero-withdrawal triggers the gate check. */
   readonly rewardAddress: string;
-  /** The applied Plutus V3 script (double-CBOR-encoded hex). */
+  /** The applied Plutus V3 script (single-CBOR hex — the bytes the ledger hashes). */
   readonly script: {
     readonly type: "PlutusV3";
     readonly script: string;

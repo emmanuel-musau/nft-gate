@@ -82,21 +82,41 @@ coin selection happens to spend the token's UTxO in the same transaction, a
 reference-inputs-only gate would reject a legitimate holder. Signer binding applies
 identically to both lists, so this widens nothing for attackers.
 
-**Certificates (publish purpose):** the validator carries an explicit `publish` handler:
+**The gate carries a fourth compile-time parameter** (added 2026-07-31 with the retire
+feature): `owner: VerificationKeyHash` — the key allowed to retire the deployment.
 
-- **stake registration** (`RegisterCredential`) → always passes, so `setup` works regardless
-  of whether the SDK/ledger emits the legacy or the Conway-style registration certificate
-  (the new style makes the script itself run);
-- **deregistration** (`UnregisterCredential`) → always fails. A live gate can never be
-  grief-killed (deregistration would break every dependent DApp and hand the ~2 ADA deposit
-  refund to the attacker). The gate is **permanent**; the deposit is intentionally
-  unrecoverable — say so in the docs;
+**Certificates (publish purpose):**
+
+- **stake registration** (`RegisterCredential`) → always passes. `setup` uses the Conway
+  certificate, which runs this handler (script attached inline, unit redeemer);
+- **deregistration** (`UnregisterCredential`) → passes iff the compile-time `owner` signed.
+  The owner — and only the owner — can reclaim the ~2 ADA deposit. This authority must be
+  the script parameter, **never a datum**: anyone can permissionlessly create UTxOs at the
+  gate's address with arbitrary datums (and even arbitrary reference scripts), so any
+  datum-derived deregistration rule collapses to open deregistration via a planted UTxO —
+  letting an attacker steal the deposit and down every dependent DApp;
 - **everything else** (delegation, DRep, pool certs) → fails. Forbidding delegation keeps the
   reward-account balance at exactly zero forever, which matters: the ledger requires a
   withdrawal to take the _full_ reward balance, so any accrued rewards would invalidate the
   zero-withdrawal trigger.
 
-All remaining purposes (spend, mint, vote, propose) are rejected via `else(_) { fail }`.
+**Spend purpose:** the reference-script UTxO published by `setup` carries an inline
+`GateDatum { owner }`; spending a gate-address UTxO requires that _its own datum's_ owner
+signed. This datum-style rule is sound precisely because it is self-referential — a datum
+only ever governs the UTxO that carries it, so a planted UTxO endangers nothing but the
+planter's own funds. Outputs without a datum are unspendable.
+
+All remaining purposes (mint, vote, propose) are rejected via `else(_) { fail }`.
+
+**How reclaim works (retire):** a Cardano transaction is one balanced ledger equation, so
+both deposits come back in a single atomic action: the retire tx SPENDS the
+reference-script UTxO (spend purpose, min-ADA enters the balance) and DEREGISTERS the stake
+credential (publish purpose, ~2 ADA refund enters the balance) — two independent script
+purposes satisfied by one owner signature, remainder to the owner, no manual amount math.
+Because the tx spends the very UTxO that held the reference script, the gate script is
+attached **inline**. The retire tx must **not** withdraw: the balance is provably zero and a
+withdrawal would fire the membership check, which the owner may not pass. **Retiring is
+end-of-life for the deployment** — any DApp still referencing the published script breaks.
 
 ### 3.2 The zero-withdrawal trigger — why it exists
 
@@ -139,7 +159,7 @@ Per project/gate instance, done once, run by the consumer (wrapped behind the SD
 
 1. **Instantiate (no transaction):** apply the project's policy ID to the compiled blueprint → get the parameterized script + its hash. The hash is the stable credential the DApp hard-codes.
 2. **Register the gate's reward account (1 tx, required):** submit a stake-registration certificate for the gate's stake credential (= script hash). Costs the standard stake deposit (~2 ADA, refundable). Without this, no zero-withdrawal can trigger the gate.
-3. **Publish the reference-script UTxO (1 tx, strongly recommended):** create one UTxO whose `reference_script` field holds the compiled gate, so every gated transaction references the code cheaply instead of inlining it. Decide placement: an address the operator controls (recoverable min-ADA, mild centralization) vs. a provably-unspendable address (permanent, trustless, min-ADA gone). Default toward permanence for a shared public good; make it configurable.
+3. **Publish the reference-script UTxO (1 tx, strongly recommended):** create one UTxO whose `reference_script` field holds the compiled gate, so every gated transaction references the code cheaply instead of inlining it. Default placement: the gate's own script address, with an inline `GateDatum { owner }` — only the owner can ever spend it (via `retire`), and the min-ADA is recoverable at end-of-life. Custom placement is configurable, but `retire` only auto-discovers the default location.
 
 We (the maintainer) run **none** of this on mainnet. The example may be deployed on Preview for demonstration only.
 
@@ -168,22 +188,41 @@ interface SetupResult {
 //    (CIP-68 label to scope to user tokens; full name for single-beacon gating).
 function instantiate(
   policyId: string,
-  options?: { minQuantity?: number; assetNamePrefix?: string },
+  options: { owner: string; minQuantity?: number; assetNamePrefix?: string },
 ): GateInstance;
 
 // 2) One-time, consumer-run: register reward account + publish reference script.
-//    Written with Effect (Effect.gen) to mirror evolution-sdk's style.
-function setup(gate: GateInstance /*, client/wallet */): Effect.Effect<SetupResult, Error>;
+//    Two txs, signed by the consumer's SigningClient. Conway registration cert
+//    (runs the publish handler). The reference script goes to the gate's own
+//    script address with an inline GateDatum{owner} — owner-reclaimable via
+//    retire(); options.referenceScriptAddress overrides placement.
+function setup(
+  client: Client.SigningClient,
+  gate: GateInstance,
+  options?: { referenceScriptAddress?: string },
+): Effect.Effect<SetupResult, GateSetupError>;
 
-// 3) The hot path: wrap a DApp tx so the gate check runs.
-//    Appends: reference the gate script + the user's NFT UTxO,
-//    add the zero-withdrawal from setup.rewardAccount, require the user as signer.
-function withGate(
-  tx: TxBuilder,
+// 3) The hot path: wrap a DApp tx so the gate check runs. Effect-returning
+//    (finalized 2026-07-30): it must FETCH the user's proof UTxO and the
+//    gate's reference-script UTxO, so the earlier sync TxBuilder->TxBuilder
+//    shape was impossible. `reader` is any read-capable client's `.effect`.
+//    Appends: both reference inputs, the zero-withdrawal, the user as signer.
+function withGate<T extends GateableTx>(
+  reader: GateReader,
+  tx: T,
   gate: GateInstance,
   setup: SetupResult,
   userAddress: string,
-): TxBuilder;
+): Effect.Effect<T, GateTxError>;
+
+// 4) End-of-life: discovers the reference-script UTxO at the gate's address,
+//    then reclaims BOTH deposits to the owner in one tx (spend + deregister,
+//    see §3.1 "How reclaim works"). Caller must sign as gate.owner.
+function retire(
+  client: Client.SigningClient,
+  gate: GateInstance,
+  options?: { to?: string },
+): Effect.Effect<string, GateRetireError>; // -> tx hash
 
 // Loads the compiled Aiken blueprint (plutus.json) produced by the on-chain build.
 function loadGateBlueprint(): { compiledCode: string };
@@ -296,7 +335,8 @@ If a full scaffold-from-current-state prompt is provided separately, follow it; 
 - **F1** `instantiate(policyId, options?)` returns a `GateInstance` with a deterministic `hash` derived from the parameterized script; any differing parameter (policy, name prefix, quantity) yields a different hash.
 - **F2** `setup(gate)` performs the two one-time transactions (stake registration, reference-script publish) and returns a `SetupResult`; it never requires the maintainer's keys (consumer signs).
 - **F3** `withGate(tx, gate, setup, userAddress)` appends the reference to the gate script, the reference to the user's NFT UTxO, the zero-withdrawal from the reward account, and the user as a required signer — producing a transaction that succeeds iff the user holds a token under the policy.
-- **F4** The on-chain gate passes iff a single reference input _or_ spent input holds ≥ `max(min_quantity, 1)` tokens under the parameterized policy matching the name prefix AND that input's payment key signed the transaction; stake registration passes, deregistration and all other certificates/purposes fail (§3.1).
+- **F4** The on-chain gate passes iff a single reference input _or_ spent input holds ≥ `max(min_quantity, 1)` tokens under the parameterized policy matching the name prefix AND that input's payment key signed the transaction; stake registration passes; deregistration passes only for the compile-time owner; gate-address UTxOs are spendable only by their datum's owner; all other certificates/purposes fail (§3.1).
+- **F7** `retire(client, gate)` discovers the reference-script UTxO at the gate address, reads nothing from datums for authority (owner comes from the gate parameters), and reclaims both deposits to the owner in one transaction (spend + deregister, no withdrawal). The CLI `retire` command prints an end-of-life warning.
 - **F5** `nft-gate instantiate <policyId>` prints the hash; other commands stubbed with clear "not implemented (M3)" until built.
 - **F6** The example demonstrates a full gated interaction on the Preview testnet.
 
@@ -325,13 +365,13 @@ If a full scaffold-from-current-state prompt is provided separately, follow it; 
 - Access control is safety-critical: prioritize the on-chain check's correctness and its adversarial tests over features.
 - Enforce the **SDK-check vs validator-check** distinction everywhere: the SDK finding/attaching the NFT is UX only and enforces nothing; the compiled validator is the sole enforcement and cannot be bypassed. Never let these blur in code or docs.
 - Never place secrets in code, URLs, or committed files. Handle mnemonics/API keys only via untracked `.env`.
-- The reference-script UTxO is a public dependency for adopters; document its placement/permanence policy clearly.
+- The reference-script UTxO is a public dependency for adopters; document clearly that the gate owner can retire it (end-of-life for every dependent DApp) and that deregistration authority lives in the script parameter, never in a datum.
 
 ---
 
 ## 14. Open questions / decisions still to make
 
-1. Reference-script UTxO placement: operator-controlled (recoverable) vs provably-unspendable (permanent). Default: permanent; make configurable.
+1. ~~Reference-script UTxO placement~~ — resolved 2026-07-31: gate's own script address + inline `GateDatum{owner}`, owner-reclaimable via `retire()`; placement configurable.
 2. Provider default for `setup`/examples (Blockfrost vs Kupo/Ogmios) and how the consumer supplies it.
 3. CLI packaging: separate `@nft-gate/cli` package (chosen) vs `bin` inside the SDK.
 4. Whether to add GitHub Actions CI (lint + build + test on push) — recommended for a public grant repo; mirror evolution-sdk's `.github`.

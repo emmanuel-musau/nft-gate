@@ -54,27 +54,32 @@ On-chain (from `onchain/`): `aiken check`, `aiken build`, then
 - Changesets for versioning. Packages stay `0.0.0` and **must not be published to npm** until
   the SDK is real (SPEC N5).
 
-## Current state (updated 2026-07-30, evening)
+## Current state (updated 2026-07-31)
 
-M1 on-chain core **implemented**:
+M1 on-chain core + M2 SDK surface **implemented** (retire feature added 2026-07-31):
 
-- `lib/gate/check.ak` holds the real membership check (pure fn, embedded-mode API);
-  `validators/gate.ak` is the thin withdraw wrapper + `publish` handler (registration passes,
-  deregistration/delegation fail — gate is permanent). Params: `asset_policy` +
-  `asset_name_prefix` ("" = any; CIP-68 label or full name to scope) + `min_quantity`
-  (clamped to ≥1 on-chain). 29 aiken tests (`lib/gate/check.test.ak` matrix,
-  `validators/gate.test.ak` handlers); blueprint rebuilt and re-vendored. Design decisions of
-  2026-07-30 are in SPEC §3.1.
-- SDK `instantiate` / `setup` / `withGate` throw / `Effect.fail` with "not implemented — M2".
-  Each stub carries a TODO stating exactly what it must do. **Note:** `instantiate` must now
-  apply THREE params — `instantiate(policyId, { minQuantity, assetNamePrefix })`.
-- CLI `deploy` / `test-gate` exit 1 with "not implemented (M3)".
+- `lib/gate/check.ak` holds the membership check (pure fn, embedded-mode API);
+  `validators/gate.ak` has four handlers: `withdraw` (membership), `spend` (gate-address
+  UTxOs released only by their inline `GateDatum{owner}`), `publish` (registration passes;
+  deregistration only for the compile-time `owner`; delegation fails), `else fail`. **Four
+  params**: `asset_policy`, `asset_name_prefix`, `min_quantity`, `owner`. Datum authority
+  must never gate deregistration (planted-UTxO spoof — see SPEC §3.1 and the
+  `publish_rejects_deregistration_via_planted_datum` regression test). 34 aiken tests.
+- evolution-sdk API verified against installed 0.5.11 — map + empirical gotchas in
+  `docs/evolution-sdk-api.md` (read before touching SDK internals; re-verify on dep bump).
+- SDK implemented: `instantiate` (4 params, hash cross-verified vs `aiken blueprint apply`
+  fixture), `setup` (Conway registration + ref script w/ `GateDatum` inline datum at the
+  gate's own address), `withGate` (Effect, structural deps, offline-tested), `retire`
+  (one-tx spend + deregister, inline script, no withdrawal, change to owner). 18 SDK tests.
+  **Nothing has run against a live network — that validation is M3.**
+- CLI: `instantiate <policyId> <ownerKeyHash>` works; `deploy`/`retire`/`test-gate` exit 1
+  ("not implemented (M3)"); `retire` prints the end-of-life warning.
 
-### Known divergence to resolve in M2
+### API divergence — resolved
 
-The current stub API (`packages/sdk/src/types.ts`, `gate-tx.ts`) predates the spec and does
-not match SPEC §5.1 exactly (field names, `withGate(tx, gate, setup, userAddress)` signature,
-`loadGateBlueprint` name). **Align the public API to SPEC §5.1 when implementing M2.**
+SPEC §5.1 was updated 2026-07-30 to the implemented API (options-object `instantiate`,
+`setup(client, gate, opts?)`, Effect-returning `withGate(reader, tx, ...)`); the earlier
+stub-vs-spec divergence no longer exists. The spec and `packages/sdk/src` now agree.
 
 ## Gotchas
 

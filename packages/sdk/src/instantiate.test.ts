@@ -1,19 +1,25 @@
 import { describe, expect, it } from "vitest";
 
-import { loadBlueprint } from "./blueprint.js";
 import { instantiate } from "./instantiate.js";
 
+// Deliberately NOT the shared fixtures: the hash below is bound to these exact
+// literal parameters, so importing them would let an unrelated fixture edit
+// break this assertion for reasons that look unrelated to instantiate.
 const policyId = "11".repeat(28);
 const owner = "aa".repeat(28);
 
-// Cross-verified fixture: `aiken blueprint apply` with the same four params
-// (policy 0x11×28, empty prefix, quantity 1, owner 0xaa×28) produces this hash.
+// Cross-verified fixture — `aiken blueprint apply` with the same four params
+// (policy 0x11×28, empty prefix, quantity 1, owner 0xaa×28) yields this hash.
+// Regenerate from onchain/ with:
+//   aiken blueprint apply -m gate -v gate 581c1111...11 -o /tmp/b1.json
+//   aiken blueprint apply -i /tmp/b1.json -m gate -v gate 40 -o /tmp/b2.json
+//   aiken blueprint apply -i /tmp/b2.json -m gate -v gate 01 -o /tmp/b3.json
+//   aiken blueprint apply -i /tmp/b3.json -m gate -v gate 581caaaa...aa
 const aikenAppliedHash = "b8ccabbf6eb3dad8171fc1704fb6bd6cc42532f13a5ae5db678c2b53";
 
 describe("instantiate", () => {
   it("derives the same script hash as aiken blueprint apply", () => {
-    const gate = instantiate(policyId, { owner });
-    expect(gate.gateScriptHash).toBe(aikenAppliedHash);
+    expect(instantiate(policyId, { owner }).gateScriptHash).toBe(aikenAppliedHash);
   });
 
   it("derives a script-credential reward address for the target network", () => {
@@ -61,13 +67,5 @@ describe("instantiate", () => {
 
   it("rejects a non-positive minQuantity", () => {
     expect(() => instantiate(policyId, { owner, minQuantity: 0 })).toThrow(/Invalid minQuantity/);
-  });
-});
-
-describe("blueprint", () => {
-  it("loads the compiled gate validator", () => {
-    const blueprint = loadBlueprint();
-    expect(blueprint.validators.length).toBeGreaterThan(0);
-    expect(blueprint.validators.some((v) => v.title.startsWith("gate."))).toBe(true);
   });
 });

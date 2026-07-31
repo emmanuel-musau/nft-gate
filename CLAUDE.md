@@ -53,6 +53,11 @@ CI fails if the tracked copy differs from a fresh build. See `onchain/CLAUDE.md`
 - **Comments only where needed**: a comment must state a constraint or rationale the code
   can't show. No narration, no restating what a line does, no filler. Keep validator/source
   files logic-only; tests live in separate `*.test.ak` / `*.test.ts` files.
+- **One test file per source module**, colocated: `foo.ts` → `foo.test.ts`, testing only
+  `foo.ts`. Shared TS fixtures live in `packages/sdk/src/__fixtures__/` (excluded from
+  `tsconfig.build.json`, so they never reach `dist/`). The `instantiate` hash fixture is the
+  documented exception — it declares its own literals so an unrelated fixture edit can't
+  break the `aiken blueprint apply` cross-check.
 - Changesets for versioning. Packages stay `0.0.0` and **must not be published to npm** until
   the SDK is real (SPEC N5).
 
@@ -72,7 +77,8 @@ M1 on-chain core + M2 SDK surface **implemented** (retire feature added 2026-07-
 - SDK implemented: `instantiate` (4 params, hash cross-verified vs `aiken blueprint apply`
   fixture), `setup` (Conway registration + ref script w/ `GateDatum` inline datum at the
   gate's own address), `withGate` (Effect, structural deps, offline-tested), `retire`
-  (one-tx spend + deregister, inline script, no withdrawal, change to owner). 20 SDK tests.
+  (one-tx spend + deregister, inline script, no withdrawal, change to owner). 22 SDK tests
+  across 5 files (one per module).
   **Nothing has run against a live network — that validation is M3.**
 - CLI: `instantiate <policyId> <ownerKeyHash>` works; `deploy`/`retire`/`test-gate` exit 1
   ("not implemented (M3)"); `retire` prints the end-of-life warning.
@@ -89,16 +95,18 @@ stub-vs-spec divergence no longer exists. The spec and `packages/sdk/src` now ag
   https://intersectmbo.github.io/evolution-sdk and read `packages/evolution` in the repo
   before writing `setup`/`withGate` internals — especially applying params to a script,
   stake-registration certificates, reference-script outputs, and zero withdrawals.
-- Root `vitest.config.ts` is **not** picked up by per-package `vitest run` (vitest resolves
-  config from the package cwd and does not walk up). Package tests currently run on defaults.
+- Vitest resolves config from the package cwd and does **not** walk up, so every package that
+  has tests owns a `vitest.config.ts`. The root config only declares `projects` so
+  `npx vitest` at the root runs them all; adding config there alone would apply to nothing.
 - `.gitignore` ignores every `plutus.json` **except** the vendored copy at
   `packages/sdk/src/plutus.json`. The blueprint validator title is `gate.gate.withdraw`.
 - The vendored `plutus.json` is **prettier-ignored on purpose**: it must stay byte-identical
   to raw `aiken build` output (which has no trailing newline) or the CI vendor check fails.
   `pnpm-lock.yaml` is prettier-ignored too — pnpm rewrites it on every install.
 - Toolchain pins: Aiken v1.1.23 + stdlib v3.1.0 (`onchain/aiken.lock`), pnpm 11
-  (`packageManager` field), Node ≥ 20. pnpm build-script approvals live in
-  `pnpm-workspace.yaml` (`allowBuilds`).
+  (`packageManager` field), **Node ≥ 22.13** — the floor comes from pinned pnpm 11.18, not
+  from the TS target; on Node 20 corepack fails with `No such built-in module: node:sqlite`.
+  pnpm build-script approvals live in `pnpm-workspace.yaml` (`allowBuilds`).
 - The blueprint is loaded from disk at runtime (`blueprint.ts` reads `plutus.json` next to the
   module); the sdk build step copies it into `dist/`. Keep that copy step when touching builds.
 

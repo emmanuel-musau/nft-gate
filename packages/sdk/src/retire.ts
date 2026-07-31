@@ -5,7 +5,6 @@ import {
   Credential,
   Data,
   KeyHash,
-  PlutusV3,
   ScriptHash,
   TransactionHash,
   type UTxO,
@@ -70,8 +69,12 @@ const fail = (message: string) => (cause: unknown) =>
  *
  * No withdrawal is added: the never-delegated reward balance is always 0, and
  * a withdrawal would run the membership check, which the owner may not pass.
- * The tx spends the very UTxO that held the reference script, so the script
- * is attached inline to serve both the spend and publish purposes.
+ *
+ * The script is NOT attached inline. The UTxO being collected is the one
+ * carrying the gate's reference script, and from Babbage on a `scriptRef` on
+ * any input — spent or reference — already supplies the script for every
+ * purpose in the tx. Attaching it as well makes the ledger reject the tx with
+ * `ExtraneousScriptWitnessesUTXOW` (observed on Preview, 2026-07-31).
  */
 export const retire = (
   client: Client.SigningClient,
@@ -101,13 +104,11 @@ export const retire = (
       : undefined;
 
     const stakeCredential = Credential.makeScriptHash(ScriptHash.toBytes(gateHash));
-    const gateScript = new PlutusV3.PlutusV3({ bytes: Bytes.fromHex(gate.script.script) });
     const unitRedeemer = Data.constr(0n, []);
 
     const built = yield* client
       .newTx()
       .collectFrom({ inputs: [referenceScriptUtxo], redeemer: unitRedeemer })
-      .attachScript({ script: gateScript })
       .deregisterStake({ stakeCredential, redeemer: unitRedeemer })
       .addSigner({ keyHash: KeyHash.fromHex(gate.owner) })
       .buildEffect(changeAddress === undefined ? {} : { changeAddress })

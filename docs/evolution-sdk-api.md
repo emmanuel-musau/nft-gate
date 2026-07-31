@@ -76,6 +76,26 @@ tx.attachScript({ script })                             // inline script attachm
 tx.buildEffect({ changeAddress? })                      // omit changeAddress to fall back to the wallet's
 ```
 
+## Never attachScript a script the tx already carries as a scriptRef (live-verified gotcha)
+
+Spending a UTxO whose `scriptRef` holds the script **already supplies that script to the
+ledger, for every purpose in the transaction** — Babbage onward resolves scripts from a
+`scriptRef` on any input, spent or reference. Calling `attachScript` as well submits it twice
+and the node rejects the whole tx:
+
+```
+ConwayUtxowFailure (ExtraneousScriptWitnessesUTXOW (NonEmptySet (fromList [ScriptHash "..."])))
+```
+
+`retire` hit exactly this on Preview (2026-07-31): it collects the reference-script UTxO and
+also attached the gate script inline, reasoning that one `attachScript` would serve both the
+`spend` and `publish` purposes. Wrong — dropping the call fixed it, and the retire tx then ran
+both handlers off the collected UTxO's `scriptRef` alone (redeemers: `spend` + `cert`, same
+script hash).
+
+Rejection is **phase-1**, so nothing is consumed and no collateral is lost — but it is also
+invisible to offline tests, which model builder calls rather than ledger witness rules.
+
 ## Reference inputs are excluded from coin selection (empirically verified gotcha)
 
 `dist/sdk/builders/phases/Selection.js` (`getAvailableUtxos`) subtracts

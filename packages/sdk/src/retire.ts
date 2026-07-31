@@ -21,7 +21,28 @@ export interface RetireOptions {
   readonly to?: string;
 }
 
-/** The UTxO at the gate address whose reference script is this gate. */
+/** Whether a UTxO carries an inline `GateDatum { owner }` naming `owner`. */
+function hasOwnerDatum(utxo: UTxO.UTxO, owner: string): boolean {
+  const datum = utxo.datumOption;
+  if (datum === undefined || datum._tag !== "InlineDatum") return false;
+  const { data } = datum;
+  if (!Data.isConstr(data) || data.index !== 0n || data.fields.length !== 1) return false;
+  const [field] = data.fields;
+  return field instanceof Uint8Array && Bytes.toHex(field) === owner;
+}
+
+/**
+ * The UTxO at the gate address carrying this gate's reference script under an
+ * inline `GateDatum { owner }` naming the gate's owner — i.e. the one `setup`
+ * published.
+ *
+ * The datum is matched for SELECTION only; authority still comes solely from
+ * the compile-time parameters on-chain. Matching it matters anyway: the gate
+ * address is permissionless, so anyone can plant a UTxO there carrying this
+ * same reference script under a datum naming themselves. Collecting one of
+ * those would build a retire tx that fails phase-2 validation (its spend
+ * demands the planter's signature), stranding the owner's deposits.
+ */
 export function findReferenceScriptUtxo(
   utxos: ReadonlyArray<UTxO.UTxO>,
   gate: GateInstance,
@@ -29,7 +50,8 @@ export function findReferenceScriptUtxo(
   return utxos.find(
     (utxo) =>
       utxo.scriptRef !== undefined &&
-      ScriptHash.toHex(ScriptHash.fromScript(utxo.scriptRef)) === gate.gateScriptHash,
+      ScriptHash.toHex(ScriptHash.fromScript(utxo.scriptRef)) === gate.gateScriptHash &&
+      hasOwnerDatum(utxo, gate.owner),
   );
 }
 
@@ -67,7 +89,7 @@ export const retire = (
     const referenceScriptUtxo = findReferenceScriptUtxo(utxos, gate);
     if (referenceScriptUtxo === undefined) {
       return yield* new GateRetireError({
-        message: `no UTxO carrying the gate's reference script found at ${Address.toBech32(gateAddress)} — already retired, or published to a custom address`,
+        message: `no UTxO at ${Address.toBech32(gateAddress)} carries the gate's reference script under an inline GateDatum naming owner ${gate.owner} — already retired, or published to a custom address`,
       });
     }
 

@@ -70,7 +70,7 @@ M1 on-chain core + M2 SDK surface **implemented** (retire feature added 2026-07-
 - SDK implemented: `instantiate` (4 params, hash cross-verified vs `aiken blueprint apply`
   fixture), `setup` (Conway registration + ref script w/ `GateDatum` inline datum at the
   gate's own address), `withGate` (Effect, structural deps, offline-tested), `retire`
-  (one-tx spend + deregister, inline script, no withdrawal, change to owner). 18 SDK tests.
+  (one-tx spend + deregister, inline script, no withdrawal, change to owner). 20 SDK tests.
   **Nothing has run against a live network — that validation is M3.**
 - CLI: `instantiate <policyId> <ownerKeyHash>` works; `deploy`/`retire`/`test-gate` exit 1
   ("not implemented (M3)"); `retire` prints the end-of-life warning.

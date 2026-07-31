@@ -2,6 +2,8 @@ import {
   Address,
   Assets,
   Bytes,
+  Data,
+  InlineDatum,
   KeyHash,
   PlutusV3,
   ScriptHash,
@@ -18,7 +20,10 @@ import { findReferenceScriptUtxo } from "./retire.js";
 import type { SetupResult } from "./types.js";
 
 const policyId = "11".repeat(28);
-const gate = instantiate(policyId, { owner: "aa".repeat(28) });
+// Distinct from userKeyHash: the gate owner and the gated user are unrelated
+// roles, and findReferenceScriptUtxo now matches on the owner.
+const ownerKeyHash = "ee".repeat(28);
+const gate = instantiate(policyId, { owner: ownerKeyHash });
 const userKeyHash = "aa".repeat(28);
 const userAddress = Address.toBech32(
   new Address.Address({ networkId: 0, paymentCredential: KeyHash.fromHex(userKeyHash) }),
@@ -48,7 +53,7 @@ const tokenAssets = (quantity: bigint, name = "0001"): Assets.Assets =>
 describe("matchingQuantity / findProofUtxo", () => {
   it("counts only prefix-matching tokens under the gate's policy", () => {
     const prefixGate = instantiate(policyId, {
-      owner: "aa".repeat(28),
+      owner: ownerKeyHash,
       assetNamePrefix: "000de140",
       minQuantity: 1,
     });
@@ -63,7 +68,7 @@ describe("matchingQuantity / findProofUtxo", () => {
   });
 
   it("selects a key-owned UTxO meeting the threshold in a single UTxO", () => {
-    const gate1000 = instantiate(policyId, { owner: "aa".repeat(28), minQuantity: 1000 });
+    const gate1000 = instantiate(policyId, { owner: ownerKeyHash, minQuantity: 1000 });
     const utxos = [
       utxo(keyAddress, tokenAssets(500n)),
       utxo(scriptAddress, tokenAssets(1000n), 1n),
@@ -73,7 +78,7 @@ describe("matchingQuantity / findProofUtxo", () => {
   });
 
   it("never sums across UTxOs and skips script-owned holdings", () => {
-    const gate1000 = instantiate(policyId, { owner: "aa".repeat(28), minQuantity: 1000 });
+    const gate1000 = instantiate(policyId, { owner: ownerKeyHash, minQuantity: 1000 });
     const utxos = [
       utxo(keyAddress, tokenAssets(500n)),
       utxo(keyAddress, tokenAssets(500n), 1n),
@@ -84,17 +89,37 @@ describe("matchingQuantity / findProofUtxo", () => {
 });
 
 describe("findReferenceScriptUtxo", () => {
-  it("selects the UTxO whose reference script hashes to the gate", () => {
-    const withRef = new UTxO.UTxO({
+  const gateDatum = (owner: string) =>
+    new InlineDatum.InlineDatum({ data: Data.constr(0n, [Data.bytearray(owner)]) });
+
+  const refUtxo = (index: bigint, datumOption?: InlineDatum.InlineDatum) =>
+    new UTxO.UTxO({
       transactionId: TransactionHash.fromHex("00".repeat(32)),
-      index: 1n,
+      index,
       address: scriptAddress,
       assets: Assets.fromLovelace(2_000_000n),
       scriptRef: new PlutusV3.PlutusV3({ bytes: Bytes.fromHex(gate.script.script) }),
+      datumOption,
     });
+
+  it("selects the UTxO whose reference script hashes to the gate", () => {
+    const published = refUtxo(1n, gateDatum(gate.owner));
     const plain = utxo(scriptAddress, Assets.fromLovelace(2_000_000n));
-    expect(findReferenceScriptUtxo([plain, withRef], gate)?.index).toBe(1n);
+    expect(findReferenceScriptUtxo([plain, published], gate)?.index).toBe(1n);
     expect(findReferenceScriptUtxo([plain], gate)).toBeUndefined();
+  });
+
+  // A planted UTxO carrying the same reference script would build a retire tx
+  // that fails phase-2 validation, so selection must skip it.
+  it("skips a planted reference script whose datum names someone else", () => {
+    const planted = refUtxo(0n, gateDatum("ff".repeat(28)));
+    const published = refUtxo(1n, gateDatum(gate.owner));
+    expect(findReferenceScriptUtxo([planted, published], gate)?.index).toBe(1n);
+    expect(findReferenceScriptUtxo([planted], gate)).toBeUndefined();
+  });
+
+  it("skips a reference script published without a datum", () => {
+    expect(findReferenceScriptUtxo([refUtxo(0n)], gate)).toBeUndefined();
   });
 });
 

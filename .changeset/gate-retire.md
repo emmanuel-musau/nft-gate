@@ -16,6 +16,9 @@ instead of permanent:
   reference-script UTxO and deregistering the stake credential (script
   attached inline, no reward withdrawal), returning the tx hash; funds default
   to the signing wallet's change address. New `GateRetireError`.
+- `findReferenceScriptUtxo` matches the inline `GateDatum{owner}` as well as
+  the reference script, so a UTxO planted at the (permissionless) gate address
+  under someone else's datum can't be picked up and stall a retire.
 - `instantiate` requires `owner` in options; `GateInstance` carries it.
 - CLI: `instantiate <policyId> <ownerKeyHash>`; `retire` command stub prints
   the end-of-life warning (retiring breaks every DApp referencing the gate).

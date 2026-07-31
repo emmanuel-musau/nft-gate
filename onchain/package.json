@@ -1,0 +1,15 @@
+{
+  "name": "@nft-gate/onchain",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Aiken Plutus V3 gate validator — wired into the workspace so pnpm test/lint/build cover the on-chain code",
+  "license": "MIT",
+  "scripts": {
+    "build": "aiken build",
+    "test": "aiken check -D",
+    "lint": "aiken fmt --check",
+    "format": "aiken fmt",
+    "vendor": "aiken build && cp plutus.json ../packages/sdk/src/plutus.json",
+    "clean": "rm -rf build plutus.json .turbo"
+  }
+}

@@ -30,16 +30,18 @@ non-trivial. This file is the operational quick reference; the spec wins on any 
 
 ```sh
 pnpm install            # corepack-managed pnpm 11 (workspace)
-pnpm build              # turbo: tsc per package; sdk build copies src/plutus.json into dist/
-pnpm test               # vitest (currently only packages/sdk has tests)
+pnpm build              # turbo: tsc per package + `aiken build`; sdk copies src/plutus.json into dist/
+pnpm test               # vitest (packages/sdk) + `aiken check -D` (onchain)
 pnpm type-check         # tsc --noEmit per package
-pnpm lint               # eslint 9 flat config (root eslint.config.mjs)
+pnpm lint               # eslint 9 flat config (root eslint.config.mjs) + `aiken fmt --check`
 pnpm format:check       # prettier
 node packages/cli/dist/index.js   # run the CLI after build
 ```
 
-On-chain (from `onchain/`): `aiken check`, `aiken build`, then
-`cp plutus.json ../packages/sdk/src/plutus.json` — see `onchain/CLAUDE.md`.
+`onchain/` is the `@nft-gate/onchain` workspace package, so the four gates above cover the
+validator — **the `aiken` binary is required to run them**. After changing the validator,
+re-vendor the blueprint with `pnpm --filter @nft-gate/onchain vendor` and commit the result;
+CI fails if the tracked copy differs from a fresh build. See `onchain/CLAUDE.md`.
 
 ## Conventions (mirror evolution-sdk)
 
@@ -91,6 +93,9 @@ stub-vs-spec divergence no longer exists. The spec and `packages/sdk/src` now ag
   config from the package cwd and does not walk up). Package tests currently run on defaults.
 - `.gitignore` ignores every `plutus.json` **except** the vendored copy at
   `packages/sdk/src/plutus.json`. The blueprint validator title is `gate.gate.withdraw`.
+- The vendored `plutus.json` is **prettier-ignored on purpose**: it must stay byte-identical
+  to raw `aiken build` output (which has no trailing newline) or the CI vendor check fails.
+  `pnpm-lock.yaml` is prettier-ignored too — pnpm rewrites it on every install.
 - Toolchain pins: Aiken v1.1.23 + stdlib v3.1.0 (`onchain/aiken.lock`), pnpm 11
   (`packageManager` field), Node ≥ 20. pnpm build-script approvals live in
   `pnpm-workspace.yaml` (`allowBuilds`).

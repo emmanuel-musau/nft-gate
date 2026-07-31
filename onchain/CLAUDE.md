@@ -8,11 +8,20 @@ Plutus V3 Aiken project holding the NFT Gate withdraw-zero validator. Full conte
 ```sh
 aiken check          # compile + run tests
 aiken build          # emit plutus.json (CIP-57 blueprint)
-cp plutus.json ../packages/sdk/src/plutus.json   # ALWAYS re-vendor after a build
+pnpm vendor          # aiken build + copy plutus.json into packages/sdk/src/
 ```
 
-The SDK loads the vendored copy at runtime; forgetting the copy step means the SDK ships a
-stale validator. `plutus.json` here is gitignored; only the vendored SDK copy is tracked.
+The SDK loads the vendored copy at runtime; forgetting the re-vendor means the SDK ships a
+stale validator. `plutus.json` here is gitignored; only the vendored SDK copy is tracked, and
+CI fails if it differs byte-for-byte from a fresh build.
+
+Vendor with `pnpm vendor`, never `prettier --write` — the tracked copy is raw `aiken build`
+output (no trailing newline) and `.prettierignore` keeps prettier off it. Reformatting it
+would break the CI vendor check.
+
+This directory is the `@nft-gate/onchain` workspace package, so the root `pnpm lint` /
+`pnpm test` / `pnpm build` run `aiken fmt --check` / `aiken check -D` / `aiken build` here.
+Working on the validator without the `aiken` binary installed is not possible.
 
 ## Pins
 
@@ -45,5 +54,6 @@ compiler objects.
 - The blueprint validator titles are `gate.gate.withdraw` / `gate.gate.spend` / `gate.gate.publish` /
   `gate.gate.else` (same hash + compiledCode each); the SDK's blueprint loader matches on the
   `gate.` prefix — keep names in sync if you rename anything.
-- CI parity: `.github/workflows/continuous-integration.yml` runs `aiken fmt --check`,
-  `aiken check -D`, `aiken build` — run all three locally before considering work done.
+- CI parity: `/.github/workflows/ci.yml` (repo root — a workflow under `onchain/.github/`
+  is never read by GitHub) runs the root pnpm gates, which cover this package, plus the
+  vendored-blueprint check. `pnpm lint && pnpm test && pnpm build` locally is equivalent.

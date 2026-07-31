@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Must match the compiler pinned in onchain/aiken.toml: a different
+      # compiler emits a different blueprint and fails the vendor check below.
+      - uses: aiken-lang/setup-aiken@v1
+        with:
+          version: v1.1.23
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+
+      # @nft-gate/onchain is a workspace member, so these four reach the Aiken
+      # validator too: lint runs `aiken fmt --check`, test runs `aiken check -D`
+      # (exits non-zero on a failing test AND on any warning), build runs
+      # `aiken build`.
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm type-check
+      - run: pnpm test
+      - run: pnpm build
+
+      # The SDK loads a vendored copy of the blueprint, so a validator change
+      # committed without re-vendoring would ship a stale script under a hash
+      # that no longer matches the source. `pnpm build` just rebuilt it.
+      - name: Verify vendored blueprint is current
+        run: |
+          cp onchain/plutus.json packages/sdk/src/plutus.json
+          if ! git diff --exit-code -- packages/sdk/src/plutus.json; then
+            echo "::error::packages/sdk/src/plutus.json is stale. Run 'pnpm --filter @nft-gate/onchain vendor' and commit the result."
+            exit 1
+          fi

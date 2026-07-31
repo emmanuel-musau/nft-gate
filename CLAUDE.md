@@ -18,13 +18,13 @@ non-trivial. This file is the operational quick reference; the spec wins on any 
 
 ## Repo map
 
-| Path                   | What                                                                                         |
-| ---------------------- | -------------------------------------------------------------------------------------------- |
-| `onchain/`             | Aiken project (Plutus V3). `validators/gate.ak` = withdraw-zero gate. Has its own CLAUDE.md. |
-| `packages/sdk/`        | `@nft-gate/sdk` — instantiate · setup (Effect) · withGate · blueprint loader                 |
-| `packages/cli/`        | `@nft-gate/cli` — `nft-gate` bin wrapping the SDK                                            |
-| `examples/demo-vault/` | Consumer demo: gated vault (on-chain hook validator still TODO)                              |
-| `docs/SPEC.md`         | Full build specification & handoff — the authoritative document                              |
+| Path                   | What                                                                                          |
+| ---------------------- | --------------------------------------------------------------------------------------------- |
+| `onchain/`             | Aiken project (Plutus V3). `validators/gate.ak` = withdraw-zero gate. Has its own CLAUDE.md.  |
+| `packages/sdk/`        | `@nft-gate/sdk` — instantiate · setup (Effect) · withGate · blueprint loader                  |
+| `packages/cli/`        | `@nft-gate/cli` — `nft-gate` bin wrapping the SDK                                             |
+| `examples/demo-vault/` | Consumer demo: `onchain/` = Aiken vault w/ the withdraw-zero hook; `app/` = deposit flow (M3) |
+| `docs/SPEC.md`         | Full build specification & handoff — the authoritative document                               |
 
 ## Commands
 
@@ -39,9 +39,15 @@ node packages/cli/dist/index.js   # run the CLI after build
 ```
 
 `onchain/` is the `@nft-gate/onchain` workspace package, so the four gates above cover the
-validator — **the `aiken` binary is required to run them**. After changing the validator,
-re-vendor the blueprint with `pnpm --filter @nft-gate/onchain vendor` and commit the result;
-CI fails if the tracked copy differs from a fresh build. See `onchain/CLAUDE.md`.
+validator — **the `aiken` binary is required to run them**, at exactly the pinned v1.1.23
+(`aikup install v1.1.23`); an older binary makes `aiken check -D` fail on a version warning.
+After changing the validator, re-vendor the blueprint with
+`pnpm --filter @nft-gate/onchain vendor` and commit the result; CI fails if the tracked copy
+differs from a fresh build. See `onchain/CLAUDE.md`.
+
+`examples/demo-vault/onchain/` is a second Aiken project (`@nft-gate/demo-vault-onchain`),
+covered by the same four gates but **not vendored** — its blueprint is copied into the demo
+app at build time, and only the gate blueprint is tracked in git.
 
 ## Conventions (mirror evolution-sdk)
 
@@ -77,11 +83,29 @@ M1 on-chain core + M2 SDK surface **implemented** (retire feature added 2026-07-
 - SDK implemented: `instantiate` (4 params, hash cross-verified vs `aiken blueprint apply`
   fixture), `setup` (Conway registration + ref script w/ `GateDatum` inline datum at the
   gate's own address), `withGate` (Effect, structural deps, offline-tested), `retire`
-  (one-tx spend + deregister, inline script, no withdrawal, change to owner). 22 SDK tests
-  across 5 files (one per module).
-  **Nothing has run against a live network — that validation is M3.**
+  (one-tx spend + deregister, inline script, no withdrawal, change to owner), plus
+  `applyParamsToPlutusV3` in `script.ts` — the param-application + single-CBOR strip that
+  `instantiate` uses, exported because consumer hook validators need it too. 28 SDK tests
+  across 6 files (one per module).
+  **`setup` is live-validated on Preview (2026-07-31)** — see below. `withGate` and `retire`
+  have still never run against a network.
 - CLI: `instantiate <policyId> <ownerKeyHash>` works; `deploy`/`retire`/`test-gate` exit 1
   ("not implemented (M3)"); `retire` prints the end-of-life warning.
+- demo-vault (M3, 2026-07-31): vault validator + `app/src/{vault,deposit}.ts` wired against
+  the real AdaLinkPlatformAuth policy on Preview. Vault hash cross-verified vs
+  `aiken blueprint apply`. See `examples/demo-vault/README.md`.
+
+### First live deployment — Preview, 2026-07-31
+
+`setup` ran end-to-end against Preview and verified against Blockfrost. Gate
+`55de2d7457cfbbf748b404c615d39d6f14af84cc8d54bdfb7322fd54` (AdaLinkPlatformAuth policy,
+exact-name prefix, minQuantity 1). Confirmed on-chain: reward account `registered: true`
+with `pool_id: null` (never delegated, so the balance stays 0 and zero-withdrawals stay
+valid); the reference-script UTxO sits at the gate's **own** script address carrying
+`reference_script_hash` equal to the gate hash and an inline `GateDatum` whose owner field
+matches the deploying wallet's payment key hash. Min-ADA for that output was 4.36 ADA.
+So the Conway `registerStake` path, the `publish` handler, and the reference-script output
+all work as designed. The `deposit`/`withdraw` legs are still unproven.
 
 ### API divergence — resolved
 

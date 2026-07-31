@@ -1,14 +1,7 @@
-import {
-  Bytes,
-  Credential,
-  Data,
-  PlutusV3,
-  RewardAccount,
-  ScriptHash,
-  UPLC,
-} from "@evolution-sdk/evolution";
+import { Credential, Data, RewardAccount, ScriptHash } from "@evolution-sdk/evolution";
 
 import { gateValidator } from "./blueprint.js";
+import { applyParamsToPlutusV3 } from "./script.js";
 import type { GateInstance } from "./types.js";
 
 export interface InstantiateOptions {
@@ -27,30 +20,7 @@ export interface InstantiateOptions {
 }
 
 /**
- * `UPLC.applyParamsToScript` returns a double-CBOR-encoded script, but the
- * ledger's script hash (and the CDDL script field) covers the single-CBOR
- * bytes — hashing the double encoding yields a wrong hash. This strips
- * exactly one bytestring layer. Verified against `aiken blueprint apply`.
- */
-function stripOneCborLayer(bytes: Uint8Array): Uint8Array {
-  const at = (i: number): number => {
-    const b = bytes[i];
-    if (b === undefined) throw new Error("Truncated CBOR in applied script");
-    return b;
-  };
-  const head = at(0);
-  if (head >= 0x40 && head <= 0x57) return bytes.subarray(1, 1 + (head - 0x40));
-  if (head === 0x58) return bytes.subarray(2, 2 + at(1));
-  if (head === 0x59) return bytes.subarray(3, 3 + ((at(1) << 8) | at(2)));
-  if (head === 0x5a) {
-    const len = (at(1) << 24) | (at(2) << 16) | (at(3) << 8) | at(4);
-    return bytes.subarray(5, 5 + len);
-  }
-  throw new Error(`Unexpected CBOR header 0x${head.toString(16)} in applied script`);
-}
-
-/**
- * Instantiates a gate for an asset policy: applies the three compile-time
+ * Instantiates a gate for an asset policy: applies the four compile-time
  * parameters to the blueprint validator, hashes the applied script, and
  * derives the reward address whose zero-withdrawal triggers the gate.
  * Pure — no network access; two equal inputs always yield the same hash.
@@ -72,17 +42,17 @@ export function instantiate(assetPolicyId: string, options: InstantiateOptions):
     throw new Error(`Invalid minQuantity: expected an integer >= 1, got ${minQuantity}`);
   }
 
-  const applied = UPLC.applyParamsToScript(gateValidator().compiledCode, [
+  const applied = applyParamsToPlutusV3(gateValidator().compiledCode, [
     Data.bytearray(assetPolicyId.toLowerCase()),
     Data.bytearray(assetNamePrefix.toLowerCase()),
     Data.int(BigInt(minQuantity)),
     Data.bytearray(owner.toLowerCase()),
   ]);
-  const scriptBytes = stripOneCborLayer(Bytes.fromHex(applied));
-  const hash = ScriptHash.fromScript(new PlutusV3.PlutusV3({ bytes: scriptBytes }));
   const rewardAccount = new RewardAccount.RewardAccount({
     networkId: network === "Mainnet" ? 1 : 0,
-    stakeCredential: Credential.makeScriptHash(ScriptHash.toBytes(hash)),
+    stakeCredential: Credential.makeScriptHash(
+      ScriptHash.toBytes(ScriptHash.fromHex(applied.scriptHash)),
+    ),
   });
 
   return {
@@ -90,8 +60,8 @@ export function instantiate(assetPolicyId: string, options: InstantiateOptions):
     assetNamePrefix: assetNamePrefix.toLowerCase(),
     minQuantity,
     owner: owner.toLowerCase(),
-    gateScriptHash: ScriptHash.toHex(hash),
+    gateScriptHash: applied.scriptHash,
     rewardAddress: RewardAccount.toBech32(rewardAccount),
-    script: { type: "PlutusV3", script: Bytes.toHex(scriptBytes) },
+    script: { type: "PlutusV3", script: applied.script },
   };
 }

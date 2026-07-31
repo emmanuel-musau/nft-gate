@@ -45,12 +45,17 @@ importers:
         specifier: ^3.16.12
         version: 3.22.0
     devDependencies:
+      '@nft-gate/demo-vault-onchain':
+        specifier: workspace:*
+        version: link:onchain
       '@types/node':
         specifier: ^22.20.1
         version: 22.20.1
       typescript:
         specifier: ^5.8.3
         version: 5.9.3
+
+  examples/demo-vault/onchain: {}
 
   onchain: {}
 

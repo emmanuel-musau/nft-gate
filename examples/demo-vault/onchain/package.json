@@ -1,0 +1,14 @@
+{
+  "name": "@nft-gate/demo-vault-onchain",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Aiken vault validator for the demo DApp — a workspace member so pnpm test/lint/build cover it",
+  "license": "MIT",
+  "scripts": {
+    "build": "aiken build",
+    "test": "aiken check -D",
+    "lint": "aiken fmt --check",
+    "format": "aiken fmt",
+    "clean": "rm -rf build plutus.json .turbo"
+  }
+}

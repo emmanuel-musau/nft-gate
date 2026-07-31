@@ -9,3 +9,5 @@ packages/sdk/src/plutus.json
 # Aiken build artifacts.
 onchain/build/
 onchain/plutus.json
+examples/demo-vault/onchain/build/
+examples/demo-vault/onchain/plutus.json

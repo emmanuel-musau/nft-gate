@@ -1,9 +1,10 @@
 packages:
   - "packages/*"
   - "examples/*"
-  # Not a JS package — joins the workspace so `pnpm test`/`lint`/`build` reach
-  # the Aiken validator instead of silently skipping the sole enforcement layer.
+  # Not JS packages — they join the workspace so `pnpm test`/`lint`/`build` reach
+  # the Aiken validators instead of silently skipping the sole enforcement layer.
   - "onchain"
+  - "examples/demo-vault/onchain"
 allowBuilds:
   "@parcel/watcher": true
   esbuild: true

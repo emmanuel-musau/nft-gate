@@ -11,8 +11,9 @@ dist/
 !packages/sdk/src/plutus.json
 
 # Per-wallet record of a live gate deployment (tx hashes, not secrets) — written
-# by the demo at runtime and only valid for the wallet that produced it.
-examples/demo-vault/deployment.*.json
+# at runtime and only valid for the wallet that produced it. Consumers
+# self-deploy (Model A), so a committed one would name a gate nobody else owns.
+examples/*/deployment.*.json
 
 # Environment — never commit real secrets
 .env

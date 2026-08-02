@@ -108,6 +108,44 @@ fails with a generic coin-selection error rather than anything actionable.
 `collectFrom` the proof UTxO instead of `readFrom`-ing it when it is the wallet's only funded
 UTxO. Untested against a live network — confirm on Preview in M3.
 
+## A failing script is refused in phase 1, not recorded in a block (live-verified)
+
+Builder-produced transactions always carry `isValid = True`. If the node then finds a script
+failing, that is a contradiction rather than an expected phase-2 failure, and the transaction is
+refused outright:
+
+```
+ConwayUtxowFailure (UtxoFailure (UtxosFailure (ValidationTagMismatch (IsValid True)
+  (FailedUnexpectedly (PlutusFailure "…")))))
+```
+
+It never enters a block and **no collateral is taken**. Landing a phase-2 failure on-chain would
+require submitting with `isValid = False`, which the builder does not expose (`isValid` exists on
+`Transaction` but there is no build option for it).
+
+The upside: that refusal body carries the entire `PlutusFailure` — script hash, `ScriptInfo`
+purpose, CEK evaluation error and full `TxInfo`. The provider's evaluate endpoint does not:
+Blockfrost/Ogmios `EvaluateTx` returns `{"EvaluationFailure":{"ScriptFailures":{}}}`, a verdict
+with an empty reasoning map. To learn _why_ a script failed, offer the transaction to the node
+and read the rejection; to learn only _whether_ it failed, evaluate.
+`examples/gate-adversarial` relies on both.
+
+## Provider errors bury the ledger's objection (live-verified)
+
+`Failed to submit transaction: Blockfrost submitTx failed` is three wrappers deep from anything
+useful — the ledger's actual complaint sits in a nested `cause` chain
+(`TransactionBuilderError` → `ProviderError` → `ResponseError`). Walk `cause` recursively before
+concluding anything about a submit failure; see `describe` in
+`examples/gate-adversarial/src/context.ts`.
+
+## awaitTx confirms the tx, but the UTxO index lags (live-verified)
+
+`setup` submits its registration, `awaitTx`es it, then builds the reference-script transaction —
+and that second submit failed on Preview (2026-08-02) because coin selection picked an input the
+registration had already spent. Blockfrost reports the transaction confirmed before its
+address-UTxO index reflects it. An identical retry succeeded. Any two-transaction sequence that
+spends from the same wallet needs to tolerate this, not just `awaitTx`.
+
 ## Client assembly & queries
 
 ```ts

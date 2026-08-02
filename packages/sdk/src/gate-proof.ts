@@ -1,13 +1,12 @@
-import { AssetName, Assets, MultiAsset, PolicyId, type UTxO } from "@evolution-sdk/evolution";
-
-import type { GateInstance } from "./types.js";
-
 /**
  * Off-chain mirror of the on-chain membership check, used to pick the proof
  * UTxO `withGate` attaches. UX only — the compiled validator is the sole
  * enforcement; getting this wrong can produce a rejected transaction, never
  * a wrongly accepted one.
  */
+import { AssetName, Assets, MultiAsset, PolicyId, type UTxO } from "@evolution-sdk/evolution";
+
+import type { GateInstance } from "./types.js";
 
 /** Quantity under the gate's policy whose asset names start with its prefix. */
 export function matchingQuantity(assets: Assets.Assets, gate: GateInstance): bigint {

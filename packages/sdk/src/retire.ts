@@ -12,6 +12,7 @@ import {
 import { Effect } from "effect";
 
 import { GateRetireError } from "./errors.js";
+import { networkIdOf } from "./network.js";
 import type { GateInstance } from "./types.js";
 
 export interface RetireOptions {
@@ -83,8 +84,10 @@ export const retire = (
 ): Effect.Effect<string, GateRetireError> =>
   Effect.gen(function* () {
     const gateHash = ScriptHash.fromHex(gate.gateScriptHash);
-    const networkId = gate.rewardAddress.startsWith("stake_test") ? 0 : 1;
-    const gateAddress = new Address.Address({ networkId, paymentCredential: gateHash });
+    const gateAddress = new Address.Address({
+      networkId: networkIdOf(gate),
+      paymentCredential: gateHash,
+    });
 
     const utxos = yield* client.effect
       .getUtxos(gateAddress)
@@ -96,9 +99,10 @@ export const retire = (
       });
     }
 
-    const changeAddress = options.to
+    const { to } = options;
+    const changeAddress = to
       ? yield* Effect.try({
-          try: () => Address.fromBech32(options.to as string),
+          try: () => Address.fromBech32(to),
           catch: fail("invalid payout address"),
         })
       : undefined;

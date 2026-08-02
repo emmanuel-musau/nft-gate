@@ -67,9 +67,10 @@ app at build time, and only the gate blueprint is tracked in git.
 - Changesets for versioning. Packages stay `0.0.0` and **must not be published to npm** until
   the SDK is real (SPEC N5).
 
-## Current state (updated 2026-07-31)
+## Current state (updated 2026-08-02)
 
-M1 on-chain core + M2 SDK surface **implemented** (retire feature added 2026-07-31):
+M1 on-chain core, M2 SDK surface and M3 (CLI + demo vault + Dune) **implemented and
+live-validated on Preview**:
 
 - `lib/gate/check.ak` holds the membership check (pure fn, embedded-mode API);
   `validators/gate.ak` has four handlers: `withdraw` (membership), `spend` (gate-address
@@ -85,12 +86,14 @@ M1 on-chain core + M2 SDK surface **implemented** (retire feature added 2026-07-
   gate's own address), `withGate` (Effect, structural deps, offline-tested), `retire`
   (one-tx spend + deregister, inline script, no withdrawal, change to owner), plus
   `applyParamsToPlutusV3` in `script.ts` — the param-application + single-CBOR strip that
-  `instantiate` uses, exported because consumer hook validators need it too. 28 SDK tests
-  across 6 files (one per module).
-  **`setup` is live-validated on Preview (2026-07-31)** — see below. `withGate` and `retire`
-  have still never run against a network.
-- CLI: `instantiate <policyId> <ownerKeyHash>` works; `deploy`/`retire`/`test-gate` exit 1
-  ("not implemented (M3)"); `retire` prints the end-of-life warning.
+  `instantiate` uses, exported because consumer hook validators need it too. 30 SDK tests
+  across 7 files (one per module). `networkIdOf` (`network.ts`) recovers the network id from
+  a gate's reward-address HRP, since network is not one of the four hashed parameters.
+  **`setup`, `withGate` and `retire` are all live-validated on Preview** — see below.
+- CLI: all four commands implemented — `instantiate` (offline), `deploy`, `test-gate`
+  (builds a gated tx without submitting; a successful build means the gate passed) and
+  `retire`, which prints the end-of-life warning first. stdout carries one machine-readable
+  value per command, everything else goes to stderr.
 - demo-vault (M3, 2026-07-31): vault validator + `app/src/{vault,deposit}.ts` wired against
   the real AdaLinkPlatformAuth policy on Preview. Vault hash cross-verified vs
   `aiken blueprint apply`. See `examples/demo-vault/README.md`.
@@ -105,7 +108,8 @@ valid); the reference-script UTxO sits at the gate's **own** script address carr
 `reference_script_hash` equal to the gate hash and an inline `GateDatum` whose owner field
 matches the deploying wallet's payment key hash. Min-ADA for that output was 4.36 ADA.
 So the Conway `registerStake` path, the `publish` handler, and the reference-script output
-all work as designed. The `deposit`/`withdraw` legs are still unproven.
+all work as designed. The `deposit` and gated `withdraw` legs were exercised against this
+same deployment afterwards, which is what the README's end-to-end claim rests on.
 
 ### API divergence — resolved
 
@@ -145,6 +149,11 @@ stub-vs-spec divergence no longer exists. The spec and `packages/sdk/src` now ag
 
 ## Milestones (SPEC §12)
 
-M1 on-chain core (real check + tests) → M2 SDK against evolution-sdk → M3 CLI + demo vault on
-Preview + Dune dashboard → M4 hardening/docs/release. `pnpm build/test/type-check/lint` must
-pass at every milestone boundary.
+M1 on-chain core (real check + tests) ✅ → M2 SDK against evolution-sdk ✅ → M3 CLI + demo
+vault on Preview + Dune dashboard ✅ → **M4 hardening/docs/release ← current**.
+`pnpm build/test/type-check/lint` must pass at every milestone boundary.
+
+Open M4 work is tracked as GitHub issues (#1–#9). The one convention gap: `setup.ts` and the
+`retire` entry point have no test file, because both take a concrete `Client.SigningClient`
+rather than the structural deps `gate-tx.ts` uses (`GateableTx`/`GateReader`) — which is
+exactly why `withGate` is offline-tested and they are not.

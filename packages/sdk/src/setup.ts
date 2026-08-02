@@ -13,6 +13,7 @@ import {
 import { Effect } from "effect";
 
 import { GateSetupError } from "./errors.js";
+import { networkIdOf } from "./network.js";
 import type { GateInstance, SetupResult } from "./types.js";
 
 export interface SetupOptions {
@@ -48,7 +49,6 @@ export const setup = (
     const stakeCredential = Credential.makeScriptHash(ScriptHash.toBytes(gateHash));
     const gateScript = new PlutusV3.PlutusV3({ bytes: Bytes.fromHex(gate.script.script) });
     const unitRedeemer = Data.constr(0n, []);
-    const networkId = gate.rewardAddress.startsWith("stake_test") ? 0 : 1;
 
     const registration = yield* client
       .newTx()
@@ -63,12 +63,13 @@ export const setup = (
       .awaitTx(registrationTxHash)
       .pipe(Effect.mapError(fail("stake registration not confirmed")));
 
-    const holdingAddress = options.referenceScriptAddress
+    const { referenceScriptAddress } = options;
+    const holdingAddress = referenceScriptAddress
       ? yield* Effect.try({
-          try: () => Address.fromBech32(options.referenceScriptAddress as string),
+          try: () => Address.fromBech32(referenceScriptAddress),
           catch: fail("invalid referenceScriptAddress"),
         })
-      : new Address.Address({ networkId, paymentCredential: gateHash });
+      : new Address.Address({ networkId: networkIdOf(gate), paymentCredential: gateHash });
 
     const ownerDatum = new InlineDatum.InlineDatum({
       data: Data.constr(0n, [Data.bytearray(gate.owner)]),

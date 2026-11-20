@@ -15,7 +15,7 @@
   "dependencies": {
     "@evolution-sdk/evolution": "^0.5.11",
     "@nft-gate/sdk": "workspace:*",
-    "effect": "^3.16.12"
+    "effect": "^3.22.1"
   },
   "devDependencies": {
     "@nft-gate/demo-vault-onchain": "workspace:*",

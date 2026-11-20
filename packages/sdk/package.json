@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "@evolution-sdk/evolution": "^0.5.11",
-    "effect": "^3.16.12"
+    "effect": "^3.22.1"
   },
   "devDependencies": {
     "@types/node": "^22.20.1",
